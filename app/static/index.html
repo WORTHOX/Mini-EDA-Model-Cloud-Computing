@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weight-Space EDA Engine</title>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a2e;
+            --bg-hover: #222240;
+            --text-primary: #e8e8f0;
+            --text-secondary: #9898b0;
+            --text-muted: #606080;
+            --accent: #6c63ff;
+            --accent-hover: #7f78ff;
+            --accent-glow: rgba(108, 99, 255, 0.15);
+            --success: #34d399;
+            --warning: #fbbf24;
+            --danger: #f87171;
+            --border: #2a2a40;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* ---- Header ---- */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+        .header h1 {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .header h1 span { color: var(--accent); }
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-badge.connected {
+            background: rgba(52, 211, 153, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(52, 211, 153, 0.2);
+        }
+        .status-badge.disconnected {
+            background: rgba(248, 113, 113, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(248, 113, 113, 0.2);
+        }
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* ---- Navigation Tabs ---- */
+        .nav-tabs {
+            display: flex;
+            gap: 2px;
+            padding: 0 32px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-tab {
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border: none;
+            background: none;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .nav-tab:hover { color: var(--text-primary); }
+        .nav-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        /* ---- Main Content ---- */
+        .main { padding: 24px 32px; max-width: 1440px; margin: 0 auto; }
+
+        /* ---- Upload Section ---- */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 48px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: var(--bg-secondary);
+            margin-bottom: 24px;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+        .upload-zone svg { margin-bottom: 12px; opacity: 0.6; }
+        .upload-zone h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .upload-zone p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .upload-zone input[type="file"] { display: none; }
+
+        /* ---- Loading ---- */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10,10,15,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            backdrop-filter: blur(4px);
+        }
+        .loading-overlay.hidden { display: none; }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text {
+            margin-top: 16px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* ---- KPI Cards Row ---- */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        .kpi-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        .kpi-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+        .kpi-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+        .kpi-sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* ---- Section Headers ---- */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 32px 0 16px;
+        }
+        .section-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .section-header .badge {
+            background: var(--accent-glow);
+            color: var(--accent);
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* ---- Chart Grid ---- */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+        .chart-card:hover {
+            border-color: rgba(108, 99, 255, 0.3);
+            box-shadow: var(--shadow);
+        }
+        .chart-card-header {
+            padding: 16px 20px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .chart-card-header h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .chart-type-tag {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: var(--bg-hover);
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        .chart-body { padding: 8px 12px; min-height: 320px; }
+        .chart-summary {
+            padding: 12px 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border);
+            background: rgba(0,0,0,0.15);
+        }
+
+        /* ---- Page 2: Query Panel ---- */
+        .query-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .query-input-row {
+            display: flex;
+            gap: 12px;
+        }
+        .query-input {
+            flex: 1;
+            padding: 14px 18px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .query-input:focus { border-color: var(--accent); }
+        .query-input::placeholder { color: var(--text-muted); }
+        .query-btn {
+            padding: 14px 28px;
+            border-radius: var(--radius-sm);
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .query-btn:hover { background: var(--accent-hover); }
+        .query-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ---- Query Result ---- */
+        .query-result { margin-top: 24px; }
+        .result-summary {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px 20px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .result-summary strong { color: var(--accent); }
+        .plan-debug {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            overflow-x: auto;
+            margin-top: 12px;
+        }
+
+        /* ---- Pivot Table ---- */
+        .pivot-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .pivot-table th {
+            background: var(--bg-hover);
+            padding: 10px 14px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+        }
+        .pivot-table td {
+            padding: 8px 14px;
+            border-bottom: 1px solid rgba(42,42,64,0.5);
+        }
+        .pivot-table tr:hover td {
+            background: var(--bg-hover);
+        }
+
+        /* ---- Schema info ---- */
+        .schema-bar {
+            display: flex;
+            gap: 16px;
+            padding: 12px 20px;
+            background: var(--bg-card);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            margin-bottom: 24px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            flex-wrap: wrap;
+        }
+        .schema-bar .chip {
+            padding: 4px 10px;
+            background: var(--bg-hover);
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        /* ---- Suggestions ---- */
+        .suggestions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .suggestion-chip {
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .suggestion-chip:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+            background: var(--accent-glow);
+        }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 768px) {
+            .main { padding: 16px; }
+            .header { padding: 12px 16px; }
+            .nav-tabs { padding: 0 16px; }
+            .chart-grid { grid-template-columns: 1fr; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .query-input-row { flex-direction: column; }
+        }
+
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .empty-state {
+            text-align: center;
+            padding: 64px 32px;
+            color: var(--text-muted);
+        }
+        .empty-state svg { margin-bottom: 16px; opacity: 0.4; }
+        .empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+    <h1><span>⚡</span> Weight-Space EDA Engine</h1>
+    <div class="header-meta">
+        <span id="dataset-name">No dataset loaded</span>
+        <span id="status-badge" class="status-badge disconnected">
+            <span class="status-dot"></span>
+            Idle
+        </span>
+    </div>
+</header>
+
+<!-- Navigation -->
+<nav class="nav-tabs">
+    <button class="nav-tab active" data-page="upload" onclick="switchPage('upload')">Upload</button>
+    <button class="nav-tab" data-page="page1" onclick="switchPage('page1')">📊 Baseline EDA</button>
+    <button class="nav-tab" data-page="page2" onclick="switchPage('page2')">💬 Interactive QA</button>
+</nav>
+
+<!-- Loading Overlay -->
+<div id="loading" class="loading-overlay hidden">
+    <div style="text-align: center;">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">Processing...</div>
+    </div>
+</div>
+
+<!-- =============== Upload Page =============== -->
+<div class="main">
+    <div id="page-upload" class="page active">
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <h3>Drop your CSV here</h3>
+            <p>or click to browse — any cleaned CSV dataset from any domain</p>
+            <input type="file" id="file-input" accept=".csv" onchange="handleUpload(event)">
+        </div>
+    </div>
+
+    <!-- =============== Page 1: Baseline EDA =============== -->
+    <div id="page-page1" class="page">
+        <div id="schema-bar" class="schema-bar" style="display:none;"></div>
+        <div id="eda-content">
+            <div class="empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="M3 9h18M9 21V9"/>
+                </svg>
+                <h3>No data loaded</h3>
+                <p>Upload a CSV file to generate automated baseline EDA</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- =============== Page 2: Interactive QA =============== -->
+    <div id="page-page2" class="page">
+        <div class="query-panel">
+            <div class="query-input-row">
+                <input type="text" class="query-input" id="query-input"
+                       placeholder="Ask a question about your data — e.g. 'Total revenue by region' or 'Top 10 products by sales'"
+                       onkeydown="if(event.key==='Enter') submitQuery()">
+                <button class="query-btn" id="query-btn" onclick="submitQuery()" disabled>Analyze</button>
+            </div>
+            <div class="suggestions" id="suggestions"></div>
+        </div>
+        <div id="query-result" class="query-result"></div>
+    </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let currentPage = 'upload';
+let datasetLoaded = false;
+
+const API = '';  // Same origin
+
+// ============================================================
+// Navigation
+// ============================================================
+function switchPage(page) {
+    currentPage = page;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.querySelector(`.nav-tab[data-page="${page}"]`).classList.add('active');
+}
+
+// ============================================================
+// Upload
+// ============================================================
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+
+function handleUpload(event) {
+    const file = event.target.files[0];
+    if (file) uploadFile(file);
+}
+
+async function uploadFile(file) {
+    showLoading('Uploading & analyzing dataset...');
+    const form = new FormData();
+    form.append('file', file);
+
+    try {
+        const res = await fetch(API + '/api/upload', { method: 'POST', body: form });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Upload failed');
+        }
+        const data = await res.json();
+        datasetLoaded = true;
+
+        // Update header
+        document.getElementById('dataset-name').textContent = data.filename + ' · ' + data.rows.toLocaleString() + ' rows × ' + data.columns + ' cols';
+        document.getElementById('status-badge').className = 'status-badge connected';
+        document.getElementById('status-badge').innerHTML = '<span class="status-dot"></span>Ready';
+        document.getElementById('query-btn').disabled = false;
+
+        // Load baseline EDA
+        showLoading('Generating baseline EDA charts...');
+        await loadBaselineEDA();
+
+        // Generate suggestions for Page 2
+        generateSuggestions(data.column_names);
+
+        hideLoading();
+        switchPage('page1');
+    } catch (err) {
+        hideLoading();
+        alert('Error: ' + err.message);
+    }
+}
+
+// ============================================================
+// Page 1: Baseline EDA
+// ============================================================
+async function loadBaselineEDA() {
+    const res = await fetch(API + '/api/baseline-eda');
+    if (!res.ok) throw new Error('Failed to load EDA');
+    const eda = await res.json();
+
+    // Schema bar
+    const schemaBar = document.getElementById('schema-bar');
+    schemaBar.style.display = 'flex';
+    schemaBar.innerHTML = `
+        <span><strong>${eda.row_count.toLocaleString()}</strong> rows</span>
+        <span><strong>${eda.column_count}</strong> columns</span>
+        ${Object.entries(eda.schema_info || {}).map(([k,v]) => `<span class="chip">${k}: ${v}</span>`).join('')}
+    `;
+
+    const container = document.getElementById('eda-content');
+    container.innerHTML = '';
+
+    // ---- KPI Cards (from univariate CARD types) ----
+    const kpis = (eda.univariate || []).filter(c => c.chart_type === 'CARD' || c.chart_type === 'MULTI_ROW_CARD');
+    if (kpis.length > 0) {
+        const kpiSection = document.createElement('div');
+        kpiSection.innerHTML = `
+            <div class="section-header">
+                <h2>Key Metrics</h2>
+                <span class="badge">${kpis.length} KPIs</span>
+            </div>
+        `;
+        const kpiGrid = document.createElement('div');
+        kpiGrid.className = 'kpi-grid';
+        kpis.forEach(kpi => {
+            if (kpi.data && kpi.data.length > 0) {
+                const row = kpi.data[0];
+                Object.entries(row).forEach(([key, val]) => {
+                    const card = document.createElement('div');
+                    card.className = 'kpi-card';
+                    card.innerHTML = `
+                        <div class="kpi-label">${key}</div>
+                        <div class="kpi-value">${formatKPI(val)}</div>
+                        <div class="kpi-sub">${kpi.title || ''}</div>
+                    `;
+                    kpiGrid.appendChild(card);
+                });
+            }
+        });
+        kpiSection.appendChild(kpiGrid);
+        container.appendChild(kpiSection);
+    }
+
+    // ---- Charts by tier ----
+    const tiers = [
+        { key: 'univariate', label: 'Univariate Analysis', desc: 'Single-variable distributions' },
+        { key: 'bivariate', label: 'Bivariate Analysis', desc: 'Two-variable relationships' },
+        { key: 'multivariate', label: 'Multivariate Analysis', desc: 'Multi-dimensional patterns' },
+    ];
+
+    tiers.forEach(tier => {
+        const charts = (eda[tier.key] || []).filter(c => c.chart_type !== 'CARD' && c.chart_type !== 'MULTI_ROW_CARD');
+        if (charts.length === 0) return;
+
+        const section = document.createElement('div');
+        section.innerHTML = `
+            <div class="section-header">
+                <h2>${tier.label}</h2>
+                <span class="badge">${charts.length} charts</span>
+            </div>
+        `;
+        const grid = document.createElement('div');
+        grid.className = 'chart-grid';
+
+        charts.forEach((chart, idx) => {
+            const card = document.createElement('div');
+            card.className = 'chart-card';
+            const chartId = `chart-${tier.key}-${idx}`;
+            card.innerHTML = `
+                <div class="chart-card-header">
+                    <h4>${chart.title || 'Chart'}</h4>
+                    <span class="chart-type-tag">${chart.chart_type}</span>
+                </div>
+                <div class="chart-body" id="${chartId}"></div>
+                ${chart.summary_text ? `<div class="chart-summary">${chart.summary_text}</div>` : ''}
+            `;
+            grid.appendChild(card);
+            // Render after DOM insertion
+            setTimeout(() => renderChart(chartId, chart), 50);
+        });
+
+        section.appendChild(grid);
+        container.appendChild(section);
+    });
+}
+
+// ============================================================
+// Page 2: Interactive QA
+// ============================================================
+async function submitQuery() {
+    const input = document.getElementById('query-input');
+    const question = input.value.trim();
+    if (!question) return;
+
+    const btn = document.getElementById('query-btn');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+
+    try {
+        const res = await fetch(API + '/api/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question }),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Query failed');
+        }
+        const result = await res.json();
+        displayQueryResult(result, question);
+    } catch (err) {
+        document.getElementById('query-result').innerHTML = `
+            <div class="result-summary" style="border-color: var(--danger);">
+                <strong>Error:</strong> ${err.message}
+            </div>
+        `;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Analyze';
+    }
+}
+
+function displayQueryResult(result, question) {
+    const container = document.getElementById('query-result');
+    container.innerHTML = '';
+
+    // Summary
+    if (result.summary) {
+        const summaryEl = document.createElement('div');
+        summaryEl.className = 'result-summary';
+        summaryEl.innerHTML = `<strong>Answer:</strong> ${result.summary}`;
+        container.appendChild(summaryEl);
+    }
+
+    // Chart
+    if (result.chart_payload && result.chart_payload.data && result.chart_payload.data.length > 0) {
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+        const chartId = 'query-chart-' + Date.now();
+        card.innerHTML = `
+            <div class="chart-card-header">
+                <h4>${question}</h4>
+                <span class="chart-type-tag">${result.chart_payload.chart_type} · ${result.intent}</span>
+            </div>
+            <div class="chart-body" id="${chartId}"></div>
+        `;
+        container.appendChild(card);
+        setTimeout(() => renderChart(chartId, result.chart_payload), 50);
+    }
+
+    // Query Plan debug
+    if (result.query_plan) {
+        const debugEl = document.createElement('details');
+        debugEl.innerHTML = `
+            <summary style="cursor:pointer; font-size:13px; color:var(--text-muted); margin-top:12px;">
+                View JSON Query Plan
+            </summary>
+            <div class="plan-debug">${JSON.stringify(result.query_plan, null, 2)}</div>
+        `;
+        container.appendChild(debugEl);
+    }
+}
+
+function generateSuggestions(columns) {
+    const container = document.getElementById('suggestions');
+    const samples = [
+        `What is the total ${columns.find(c => /amount|revenue|sales|price|cost|total|profit/i.test(c)) || columns[0]}?`,
+        `Top 10 by ${columns.find(c => /amount|revenue|sales|price|cost|total/i.test(c)) || columns[0]}`,
+        `How many rows are there?`,
+    ];
+    if (columns.length > 1) {
+        samples.push(`Average ${columns[0]} by ${columns[1]}`);
+    }
+    container.innerHTML = samples.map(s =>
+        `<span class="suggestion-chip" onclick="document.getElementById('query-input').value='${s}';submitQuery();">${s}</span>`
+    ).join('');
+}
+
+// ============================================================
+// Chart Rendering (Plotly)
+// ============================================================
+const PLOTLY_LAYOUT_BASE = {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#9898b0', family: 'Inter, sans-serif', size: 12 },
+    margin: { t: 24, r: 24, b: 48, l: 56 },
+    xaxis: { gridcolor: '#2a2a40', zerolinecolor: '#2a2a40' },
+    yaxis: { gridcolor: '#2a2a40', zerolinecolor: '#2a2a40' },
+    colorway: ['#6c63ff', '#34d399', '#fbbf24', '#f87171', '#60a5fa', '#a78bfa', '#f472b6', '#4ade80'],
+    showlegend: false,
+    autosize: true,
+};
+const PLOTLY_CONFIG = { responsive: true, displayModeBar: false };
+
+function renderChart(containerId, chart) {
+    const el = document.getElementById(containerId);
+    if (!el || !chart.data || chart.data.length === 0) {
+        if (el) el.innerHTML = '<div class="empty-state" style="padding:24px;"><p>No data to display</p></div>';
+        return;
+    }
+
+    const data = chart.data;
+    const fp = chart.field_placement || {};
+    const type = chart.chart_type;
+
+    try {
+        switch (type) {
+            case 'BAR':
+            case 'CLUSTERED_BAR': renderBar(el, data, fp, 'h'); break;
+            case 'COLUMN':
+            case 'CLUSTERED_COLUMN': renderBar(el, data, fp, 'v'); break;
+            case 'STACKED_BAR': renderStackedBar(el, data, fp, 'h'); break;
+            case 'STACKED_COLUMN': renderStackedBar(el, data, fp, 'v'); break;
+            case 'LINE': renderLine(el, data, fp); break;
+            case 'AREA': renderArea(el, data, fp); break;
+            case 'SCATTER': renderScatter(el, data, fp); break;
+            case 'BUBBLE': renderBubble(el, data, fp); break;
+            case 'HISTOGRAM': renderHistogram(el, data, fp); break;
+            case 'PIE':
+            case 'DONUT': renderPie(el, data, fp, type === 'DONUT'); break;
+            case 'CARD':
+            case 'MULTI_ROW_CARD': renderCard(el, data, fp, chart.title); break;
+            case 'MAP': renderMap(el, data, fp); break;
+            case 'MATRIX': renderTable(el, data); break;
+            default: renderGenericBar(el, data); break;
+        }
+    } catch (e) {
+        console.warn('Chart render error:', e);
+        renderGenericBar(el, data);
+    }
+}
+
+function renderBar(el, data, fp, orientation) {
+    const xCol = fp.axis_x || Object.keys(data[0])[0];
+    const yCol = fp.axis_y || Object.keys(data[0])[1] || Object.keys(data[0])[0];
+    const trace = {
+        type: 'bar',
+        orientation,
+        x: orientation === 'h' ? data.map(r => r[yCol]) : data.map(r => r[xCol]),
+        y: orientation === 'h' ? data.map(r => r[xCol]) : data.map(r => r[yCol]),
+        marker: { color: '#6c63ff', cornerradius: 4 },
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE }, PLOTLY_CONFIG);
+}
+
+function renderStackedBar(el, data, fp, orientation) {
+    // Group by legend column if available
+    const xCol = fp.axis_x || Object.keys(data[0])[0];
+    const yCol = fp.axis_y || Object.keys(data[0])[1];
+    const trace = {
+        type: 'bar',
+        orientation,
+        x: data.map(r => r[xCol]),
+        y: data.map(r => r[yCol]),
+        marker: { color: '#6c63ff' },
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE, barmode: 'stack' }, PLOTLY_CONFIG);
+}
+
+function renderLine(el, data, fp) {
+    const xCol = fp.axis_x || Object.keys(data[0])[0];
+    const yCol = fp.axis_y || Object.keys(data[0])[1] || Object.keys(data[0])[0];
+    const trace = {
+        type: 'scatter',
+        mode: 'lines+markers',
+        x: data.map(r => r[xCol]),
+        y: data.map(r => r[yCol]),
+        line: { color: '#6c63ff', width: 2 },
+        marker: { size: 4 },
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE }, PLOTLY_CONFIG);
+}
+
+function renderArea(el, data, fp) {
+    const xCol = fp.axis_x || Object.keys(data[0])[0];
+    const yCol = fp.axis_y || Object.keys(data[0])[1];
+    const trace = {
+        type: 'scatter',
+        mode: 'lines',
+        fill: 'tozeroy',
+        x: data.map(r => r[xCol]),
+        y: data.map(r => r[yCol]),
+        line: { color: '#6c63ff' },
+        fillcolor: 'rgba(108,99,255,0.15)',
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE }, PLOTLY_CONFIG);
+}
+
+function renderScatter(el, data, fp) {
+    const xCol = fp.axis_x || Object.keys(data[0])[0];
+    const yCol = fp.axis_y || Object.keys(data[0])[1];
+    const trace = {
+        type: 'scatter',
+        mode: 'markers',
+        x: data.map(r => r[xCol]),
+        y: data.map(r => r[yCol]),
+        marker: { color: '#6c63ff', size: 7, opacity: 0.7 },
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE }, PLOTLY_CONFIG);
+}
+
+function renderBubble(el, data, fp) {
+    const xCol = fp.axis_x || Object.keys(data[0])[0];
+    const yCol = fp.axis_y || Object.keys(data[0])[1];
+    const sizeCol = fp.size || Object.keys(data[0])[2];
+    const sizes = data.map(r => Math.abs(r[sizeCol] || 10));
+    const maxS = Math.max(...sizes, 1);
+    const trace = {
+        type: 'scatter',
+        mode: 'markers',
+        x: data.map(r => r[xCol]),
+        y: data.map(r => r[yCol]),
+        marker: {
+            size: sizes.map(s => 8 + (s / maxS) * 40),
+            color: '#6c63ff',
+            opacity: 0.6,
+            line: { width: 1, color: '#8b85ff' },
+        },
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE }, PLOTLY_CONFIG);
+}
+
+function renderHistogram(el, data, fp) {
+    const col = fp.axis_x || Object.keys(data[0])[0];
+    const trace = {
+        type: 'histogram',
+        x: data.map(r => r[col]),
+        marker: { color: '#6c63ff' },
+        nbinsx: 30,
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE }, PLOTLY_CONFIG);
+}
+
+function renderPie(el, data, fp, isDonut) {
+    const labelCol = fp.legend || fp.axis_x || Object.keys(data[0])[0];
+    const valCol = fp.values || fp.axis_y || Object.keys(data[0])[1] || Object.keys(data[0])[0];
+    const trace = {
+        type: 'pie',
+        labels: data.map(r => r[labelCol]),
+        values: data.map(r => r[valCol]),
+        hole: isDonut ? 0.45 : 0,
+        marker: { colors: ['#6c63ff', '#34d399', '#fbbf24', '#f87171', '#60a5fa', '#a78bfa'] },
+        textfont: { color: '#e8e8f0' },
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE, showlegend: true }, PLOTLY_CONFIG);
+}
+
+function renderCard(el, data, fp, title) {
+    if (!data || !data.length) return;
+    const row = data[0];
+    const key = (fp && fp.values) || Object.keys(row)[0];
+    const val = row[key] !== undefined ? row[key] : Object.values(row)[0];
+    el.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:220px;text-align:center;">
+            <div style="font-size:14px;text-transform:uppercase;letter-spacing:1.5px;color:#94a3b8;margin-bottom:10px;">${key}</div>
+            <div style="font-size:44px;font-weight:700;color:#6c63ff;margin-bottom:10px;font-variant-numeric:tabular-nums;">${formatKPI(val)}</div>
+            <div style="color:#64748b;font-size:13px;max-width:320px;">${title || ''}</div>
+        </div>
+    `;
+}
+
+function renderMap(el, data, fp) {
+    if (!data || !data.length) return;
+    const locCol = (fp && fp.location) || Object.keys(data[0])[0];
+    const valCol = (fp && fp.color) || Object.keys(data[0])[1] || Object.keys(data[0])[0];
+    const trace = {
+        type: 'bar',
+        x: data.map(r => r[locCol]),
+        y: data.map(r => r[valCol]),
+        marker: {
+            color: '#34d399',
+            cornerradius: 4,
+        },
+    };
+    const layout = {
+        ...PLOTLY_LAYOUT_BASE,
+        xaxis: { ...PLOTLY_LAYOUT_BASE.xaxis, title: locCol },
+        yaxis: { ...PLOTLY_LAYOUT_BASE.yaxis, title: valCol },
+    };
+    Plotly.newPlot(el, [trace], layout, PLOTLY_CONFIG);
+}
+
+function renderTable(el, data) {
+    if (!data.length) return;
+    const cols = Object.keys(data[0]);
+    let html = '<div style="overflow-x:auto;max-height:400px;overflow-y:auto;"><table class="pivot-table"><thead><tr>';
+    cols.forEach(c => html += `<th>${c}</th>`);
+    html += '</tr></thead><tbody>';
+    data.slice(0, 100).forEach(row => {
+        html += '<tr>';
+        cols.forEach(c => html += `<td>${row[c] != null ? row[c] : ''}</td>`);
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+}
+
+function renderGenericBar(el, data) {
+    if (!data.length) return;
+    const keys = Object.keys(data[0]);
+    if (keys.length < 2) { renderTable(el, data); return; }
+    const trace = {
+        type: 'bar',
+        x: data.map(r => r[keys[0]]),
+        y: data.map(r => r[keys[1]]),
+        marker: { color: '#6c63ff', cornerradius: 4 },
+    };
+    Plotly.newPlot(el, [trace], { ...PLOTLY_LAYOUT_BASE }, PLOTLY_CONFIG);
+}
+
+// ============================================================
+// Utilities
+// ============================================================
+function formatKPI(val) {
+    if (val == null) return 'N/A';
+    const n = Number(val);
+    if (isNaN(n)) return String(val);
+    if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    if (Number.isInteger(n)) return n.toLocaleString();
+    return n.toFixed(2);
+}
+
+function showLoading(text) {
+    document.getElementById('loading-text').textContent = text || 'Processing...';
+    document.getElementById('loading').classList.remove('hidden');
+}
+
+function hideLoading() {
+    document.getElementById('loading').classList.add('hidden');
+}
+</script>
+</body>
+</html>
+
